@@ -38,16 +38,22 @@ def _build_database_uri():
     except Exception:
         pass
 
-    # If MySQL not reachable and running in dev, fall back to SQLite
-    if os.environ.get("FLASK_ENV", "development") != "production":
-        print(f"[DB] MySQL not reachable on {host}:{port} -> using SQLite fallback for local dev")
-        print("[DB] Start XAMPP MySQL and run 'python setup_mysql.py' to use MySQL")
-        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        db_path = os.path.join(backend_dir, "instance", "vulnscan.db")
-        return f"sqlite:///{db_path}"
+    # If MySQL not reachable on host, fall back to SQLite with notice
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.makedirs(os.path.join(backend_dir, "instance"), exist_ok=True)
+    db_path = os.path.join(backend_dir, "instance", "vulnscan.db")
+    print(f"[DB] MySQL not reachable on {host}:{port} -> using SQLite fallback ({db_path})")
+    return f"sqlite:///{db_path}"
 
-    return mysql_uri
 
+def _format_frontend_url():
+    """Format and normalize FRONTEND_URL so Render service names work as complete URLs."""
+    raw = os.environ.get("FRONTEND_URL", "http://localhost:5173").strip()
+    if raw and not raw.startswith("http://") and not raw.startswith("https://"):
+        if ".onrender.com" not in raw and "localhost" not in raw:
+            return f"https://{raw}.onrender.com"
+        return f"https://{raw}"
+    return raw
 
 
 class Config:
@@ -74,7 +80,7 @@ class Config:
     MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "noreply@vulnscan.io")
 
-    FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+    FRONTEND_URL = _format_frontend_url()
     ZAP_API_URL = os.environ.get("ZAP_API_URL", "http://localhost:8080")
     ZAP_API_KEY = os.environ.get("ZAP_API_KEY", "")
 
