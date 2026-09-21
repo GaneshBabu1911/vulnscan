@@ -28,8 +28,8 @@ def create_app(config_class=None):
 
     CORS(
         app,
-        origins="*",
-        supports_credentials=False,
+        origins=[app.config["FRONTEND_URL"], "http://localhost:5173"],
+        supports_credentials=True,
     )
 
     @app.after_request

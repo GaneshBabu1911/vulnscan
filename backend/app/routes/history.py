@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.models import Scan, Vulnerability
+from app.services.activity_service import log_user_activity
 from app.utils.decorators import active_user_required
 
 history_bp = Blueprint("history", __name__)
@@ -55,7 +56,6 @@ def scan_detail(scan_id):
 @active_user_required()
 def delete_scan(scan_id):
     from app.database import db
-    from app.utils.decorators import log_activity
 
     user_id = int(get_jwt_identity())
     scan = Scan.query.get(scan_id)
@@ -64,7 +64,14 @@ def delete_scan(scan_id):
     if scan.user_id != user_id:
         return jsonify({"error": "Access denied"}), 403
 
+    target_url = scan.target.url if scan.target else "unknown"
     db.session.delete(scan)
     db.session.commit()
-    log_activity(user_id, "scan_deleted", f"Deleted scan {scan_id}")
+
+    log_user_activity(
+        user_id=user_id,
+        activity="Viewed Scan History",
+        module="History",
+        description=f"Deleted scan #{scan_id} for {target_url}",
+    )
     return jsonify({"message": "Scan deleted"})

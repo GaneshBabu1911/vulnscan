@@ -3,7 +3,8 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.database import db
 from app.models import Notification, User
-from app.utils.decorators import active_user_required, log_activity
+from app.services.activity_service import get_user_activity, log_user_activity
+from app.utils.decorators import active_user_required
 
 profile_bp = Blueprint("profile", __name__)
 
@@ -40,9 +41,48 @@ def update_profile():
         user.email = new_email
 
     db.session.commit()
-    log_activity(user_id, "profile_updated", "Profile updated")
+    log_user_activity(
+        user_id=user_id,
+        activity="Updated Profile",
+        module="Profile",
+        description="User updated their profile information",
+    )
     return jsonify({"message": "Profile updated", "user": user.to_dict()})
 
+
+# ── Activity History ──────────────────────────────────────────────────────────
+
+@profile_bp.route("/activity", methods=["GET"])
+@jwt_required()
+@active_user_required()
+def get_activity():
+    """
+    Return the latest 15 activity log entries for the authenticated user.
+
+    Response shape:
+    {
+        "activity": [
+            {
+                "id": 1,
+                "activity": "Login",
+                "module": "Auth",
+                "description": "User johndoe logged in",
+                "created_at": "2026-09-21T09:00:00"
+            },
+            ...
+        ],
+        "total": 15
+    }
+    """
+    user_id = int(get_jwt_identity())
+    logs = get_user_activity(user_id, limit=15)
+    return jsonify({
+        "activity": [log.to_dict() for log in logs],
+        "total": len(logs),
+    })
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
 
 @profile_bp.route("/notifications", methods=["GET"])
 @jwt_required()

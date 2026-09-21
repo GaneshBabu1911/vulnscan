@@ -1,68 +1,33 @@
-# Environment Variables & Secrets
+# Root gitignore
 .env
 .env.*
 !.env.example
-*.env
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Virtual Environments
-venv/
-.venv/
-env/
-.env/
-ENV/
-env.bak/
-venv.bak/
-
-# Flask / Database
-instance/
+!backend/.env.example
 *.db
 *.sqlite
 *.sqlite3
-
-# Node / Frontend
+__pycache__/
+*.pyc
+*.pyo
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-.pnpm-debug.log*
 dist/
-dist-ssr/
-*.local
-
-# Logs
-*.log
-logs/
-
-# IDE & OS
 .vscode/
 .idea/
-*.sublime-project
-*.sublime-workspace
+*.log
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Flask instance folder (local SQLite DB lives here)
+instance/
+
+# Generated reports
+backend/app/reports/generated/
+*.pdf
+*.csv
+
+# OS files
 .DS_Store
 Thumbs.db

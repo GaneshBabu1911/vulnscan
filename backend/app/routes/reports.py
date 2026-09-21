@@ -6,7 +6,8 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from app.database import db
 from app.models import Report, Scan
 from app.reports.generator import ReportGenerator
-from app.utils.decorators import active_user_required, log_activity
+from app.services.activity_service import log_user_activity
+from app.utils.decorators import active_user_required
 
 reports_bp = Blueprint("reports", __name__)
 
@@ -41,7 +42,12 @@ def generate_report(scan_id):
     db.session.add(report)
     db.session.commit()
 
-    log_activity(user_id, "report_generated", f"{fmt.upper()} report for scan {scan_id}")
+    log_user_activity(
+        user_id=user_id,
+        activity="Downloaded Report",
+        module="Reports",
+        description=f"{fmt.upper()} report generated for scan #{scan_id} – target: {scan.target.url if scan.target else 'N/A'}",
+    )
 
     return jsonify({"message": "Report generated", "report": report.to_dict()}), 201
 

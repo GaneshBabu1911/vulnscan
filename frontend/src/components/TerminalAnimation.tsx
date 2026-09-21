@@ -1,29 +1,25 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiTerminal } from 'react-icons/fi';
 
 const lines = [
-  { text: '$ vulnscan assess https://api.target-enterprise.com --depth=full', type: 'cmd' },
-  { text: '[*] Initializing VulnScan enterprise security pipeline v3.4...', type: 'log' },
-  { text: '[+] Spawning OWASP ZAP core engine (200+ rule active scan)...', type: 'log' },
-  { text: '[+] Launching Nmap stealth SYN service discovery on target...', type: 'log' },
-  { text: '[+] Analyzing SSL/TLS cipher suites and HSTS policies...', type: 'log' },
-  { text: '[✓] Target service enumeration complete: 4 services identified', type: 'success' },
-  { text: '[!] OWASP ZAP Alert: Detected CWE-89 SQL Injection in /api/v1/auth', type: 'warn' },
-  { text: '[✓] Calculating CVSS v3.1 vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H', type: 'log' },
-  { text: '[★] AI Remediation Engine: Synthesized parameterized query patch', type: 'ai' },
-  { text: '[✓] Executive PDF & JSON compliance report exported successfully', type: 'success' },
+  { text: '$ vulnscan --init', type: 'cmd' },
+  { text: '[+] Initializing security assessment engine...', type: 'info' },
+  { text: '[+] Loading OWASP ZAP integration...', type: 'info' },
+  { text: '[+] Loading Nmap scanner module...', type: 'info' },
+  { text: '[+] Loading SSL/TLS checker...', type: 'info' },
+  { text: '[+] Loading CVSS v3.1 risk engine...', type: 'info' },
+  { text: '[✓] All modules loaded successfully', type: 'success' },
+  { text: '[!] 3 vulnerabilities detected in target', type: 'warn' },
+  { text: '[✓] CVSS calculation complete — Risk: 7.8/10', type: 'success' },
   { text: '$ _', type: 'cmd' },
 ];
 
 const lineColor = (type: string) => {
   switch (type) {
+    case 'success': return '#FFD814';
+    case 'warn':    return '#DC2626';
     case 'cmd':     return '#FFFFFF';
-    case 'log':     return '#38BDF8';
-    case 'success': return '#FFB703';
-    case 'warn':    return '#EF4444';
-    case 'ai':      return '#F59E0B';
-    default:        return '#9CA3AF';
+    default:        return '#9AA0A6';
   }
 };
 
@@ -38,7 +34,7 @@ export default function TerminalAnimation() {
         setDisplayLines([]);
         setCurrentLine(0);
         setCurrentChar(0);
-      }, 4000);
+      }, 3000);
       return () => clearTimeout(timeout);
     }
 
@@ -51,60 +47,47 @@ export default function TerminalAnimation() {
           return updated;
         });
         setCurrentChar((c) => c + 1);
-      }, line.type === 'cmd' ? 24 + Math.random() * 20 : 12);
+      }, 28 + Math.random() * 35);
       return () => clearTimeout(timeout);
     } else {
       const timeout = setTimeout(() => {
         setCurrentLine((l) => l + 1);
         setCurrentChar(0);
-      }, line.type === 'cmd' ? 300 : 180);
+      }, 350);
       return () => clearTimeout(timeout);
     }
   }, [currentLine, currentChar]);
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 25 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.8, delay: 0.2 }}
-      className="w-full rounded-[18px] overflow-hidden border border-[#232F3E] shadow-2xl shadow-black/80 backdrop-blur-xl"
-      style={{ background: '#080B0F' }}
+      transition={{ duration: 0.7, delay: 0.2 }}
+      className="w-full max-w-2xl"
+      style={{ background: '#0A0C0C', border: '1px solid #303333', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
     >
-      {/* Terminal Titlebar */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#232F3E] bg-[#10141D]">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#EF4444] shadow-sm" />
-          <div className="w-3 h-3 rounded-full bg-[#F59E0B] shadow-sm" />
-          <div className="w-3 h-3 rounded-full bg-[#10B981] shadow-sm" />
-          <span className="ml-3 text-xs font-mono font-medium text-[#9CA3AF] flex items-center gap-1.5">
-            <FiTerminal className="text-[#FFB703]" size={13} />
-            vulnscan-core — assessment@production
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
-          <span className="text-[11px] font-mono text-[#10B981] font-semibold uppercase tracking-wider">Live Agent</span>
-        </div>
+      {/* Terminal titlebar */}
+      <div className="flex items-center gap-2 px-4 py-3" style={{ background: '#1A1D1D', borderBottom: '1px solid #303333' }}>
+        <div className="w-3 h-3 rounded-full" style={{ background: '#DC2626' }} />
+        <div className="w-3 h-3 rounded-full" style={{ background: '#D97706' }} />
+        <div className="w-3 h-3 rounded-full" style={{ background: '#16A34A' }} />
+        <span className="ml-2 text-xs font-mono" style={{ color: '#5F6368' }}>vulnscan — security-assessment</span>
       </div>
 
-      {/* Terminal Body */}
-      <div className="p-6 font-mono text-[13px] sm:text-[14px] leading-relaxed min-h-[340px] flex flex-col justify-start overflow-x-auto select-none">
+      {/* Terminal body */}
+      <div className="p-5 min-h-[220px] font-mono text-sm leading-relaxed" style={{ lineHeight: '1.7' }}>
         {displayLines.map((line, i) => (
-          <div key={i} className="mb-1.5 flex items-start" style={{ color: lineColor(line.type) }}>
-            <span className="break-all">{line.text}</span>
+          <div key={i} style={{ color: lineColor(line.type) }}>
+            {line.text}
             {i === currentLine && currentLine < lines.length - 1 && (
-              <span className="inline-block w-2 h-4 ml-1 bg-[#FFB703] animate-pulse" />
+              <span className="cursor-blink" style={{ color: '#FF9900' }}>▊</span>
             )}
           </div>
         ))}
         {currentLine >= lines.length && (
-          <div className="flex items-center text-white">
-            <span>$ _</span>
-            <span className="inline-block w-2 h-4 ml-1 bg-[#FFB703] animate-pulse" />
-          </div>
+          <span className="cursor-blink" style={{ color: '#FF9900' }}>▊</span>
         )}
       </div>
     </motion.div>
   );
 }
-

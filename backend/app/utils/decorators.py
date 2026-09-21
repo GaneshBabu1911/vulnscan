@@ -5,8 +5,7 @@ from functools import wraps
 from flask import request
 from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
 
-from app.database import db
-from app.models import ActivityLog, User
+from app.models import User
 
 
 def admin_required():
@@ -45,14 +44,41 @@ def generate_token(length=32):
 
 
 def log_activity(user_id, action, details=None):
-    log = ActivityLog(
+    """
+    Backward-compatible wrapper around log_user_activity().
+
+    Existing callers that pass (user_id, action, details) continue to work.
+    The action string is used as both the activity label and mapped to a module.
+    """
+    from app.services.activity_service import log_user_activity
+
+    # Derive a friendly module name from the action string
+    module_map = {
+        "login": "Auth",
+        "logout": "Auth",
+        "register": "Auth",
+        "change_password": "Auth",
+        "scan_started": "Scanner",
+        "scan_completed": "Scanner",
+        "scan_deleted": "History",
+        "report_generated": "Reports",
+        "profile_updated": "Profile",
+        "admin_delete_user": "Admin",
+        "admin_suspended_user": "Admin",
+        "admin_unsuspended_user": "Admin",
+        "viewed_analytics": "Dashboard",
+    }
+    module = module_map.get(action, "System")
+
+    # Convert snake_case action to Title Case for display
+    activity_label = action.replace("_", " ").title()
+
+    log_user_activity(
         user_id=user_id,
-        action=action,
-        details=details,
-        ip_address=request.remote_addr if request else None,
+        activity=activity_label,
+        module=module,
+        description=details or "",
     )
-    db.session.add(log)
-    db.session.commit()
 
 
 def utcnow():

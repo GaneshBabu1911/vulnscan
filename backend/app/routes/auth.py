@@ -16,7 +16,7 @@ from app.services.auth_service import (
     verify_email_token,
     verify_otp_and_issue_session,
 )
-from app.utils.decorators import log_activity
+from app.services.activity_service import log_user_activity
 from app.utils.security import hash_password
 from app.utils.validators import validate_email, validate_password, validate_username
 
@@ -51,7 +51,12 @@ def register():
 
     user, token = register_user(username, email, password)
     send_verification_email(user, token)
-    log_activity(user.id, "register", f"User {username} registered")
+    log_user_activity(
+        user_id=user.id,
+        activity="Registered",
+        module="Auth",
+        description=f"New account created for {username}",
+    )
 
     return jsonify({"message": "Registration successful. Please verify your email.", "user": user.to_dict()}), 201
 
@@ -76,7 +81,12 @@ def login():
     )
     refresh_token = create_refresh_token(identity=str(user.id))
 
-    log_activity(user.id, "login", f"User {user.username} logged in")
+    log_user_activity(
+        user_id=user.id,
+        activity="Login",
+        module="Auth",
+        description=f"User {user.username} logged in",
+    )
 
     return jsonify({
         "access_token": access_token,
@@ -101,7 +111,12 @@ def refresh():
 @jwt_required()
 def logout():
     user_id = get_jwt_identity()
-    log_activity(int(user_id), "logout", "User logged out")
+    log_user_activity(
+        user_id=int(user_id),
+        activity="Logout",
+        module="Auth",
+        description="User logged out",
+    )
     return jsonify({"message": "Logged out successfully"})
 
 
@@ -235,5 +250,10 @@ def change_password():
 
     user.password_hash = hash_password(new_pass)
     db.session.commit()
-    log_activity(user.id, "change_password", "Password changed")
+    log_user_activity(
+        user_id=user.id,
+        activity="Changed Password",
+        module="Auth",
+        description="User changed their account password",
+    )
     return jsonify({"message": "Password updated successfully"})

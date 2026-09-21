@@ -1,8 +1,6 @@
 import axios from 'axios';
 
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? 'https://vulnscan-backend-4oz4.onrender.com/api' : '/api');
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -101,6 +99,8 @@ export const profileAPI = {
   notifications: () => api.get('/profile/notifications'),
   markRead: (id: number) => api.put(`/profile/notifications/${id}/read`),
   markAllRead: () => api.put('/profile/notifications/read-all'),
+  /** Fetch the latest 15 activity log entries for the authenticated user */
+  activity: () => api.get('/profile/activity'),
 };
 
 export const adminAPI = {

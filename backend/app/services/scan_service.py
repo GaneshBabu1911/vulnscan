@@ -12,10 +12,12 @@ from app.scanner.header_checker import HeaderChecker
 from app.scanner.nmap_scanner import NmapScanner
 from app.scanner.ssl_checker import SSLChecker
 from app.scanner.zap_scanner import ZAPScanner
+from app.services.activity_service import log_user_activity
 from app.services.ai_engine import AIRecommendationEngine
 from app.services.auth_service import send_critical_alert_email, send_scan_complete_email
 from app.services.risk_engine import calculate_overall_risk, score_vulnerability, score_zap_alert
 from app.utils.validators import extract_domain_from_url
+
 
 
 class ScanOrchestrator:
@@ -163,6 +165,14 @@ class ScanOrchestrator:
                 db.session.commit()
 
                 self._log(f"Scan completed. Risk score: {risk_score}/10 ({overall_severity})")
+
+                # Log completed scan activity
+                log_user_activity(
+                    user_id=scan.user_id,
+                    activity="Completed Scan",
+                    module="Scanner",
+                    description=f"Scan of {url} completed – risk score {risk_score}/10 ({overall_severity})",
+                )
 
                 # Notifications
                 user = scan.user

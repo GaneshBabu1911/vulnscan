@@ -15,8 +15,8 @@ scan_bp = Blueprint("scan", __name__)
 def start_scan():
     from app.database import db
     from app.models import Target
+    from app.services.activity_service import log_user_activity
     from app.services.scan_service import resolve_ip, start_scan_async
-    from app.utils.decorators import log_activity
     from app.utils.validators import extract_domain_from_url, validate_domain, validate_ip, validate_url
     from flask import current_app
 
@@ -53,7 +53,12 @@ def start_scan():
     db.session.add(scan)
     db.session.commit()
 
-    log_activity(user_id, "scan_started", f"Scan started for {url}")
+    log_user_activity(
+        user_id=user_id,
+        activity="Started Scan",
+        module="Scanner",
+        description=f"Vulnerability scan initiated for {url}",
+    )
     start_scan_async(scan.id, current_app._get_current_object())
 
     return jsonify({"message": "Scan started", "scan": scan.to_dict()}), 201

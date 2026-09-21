@@ -3,6 +3,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import func
 
 from app.models import ActivityLog, Scan, Vulnerability
+from app.services.activity_service import log_user_activity
 from app.utils.decorators import active_user_required
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -39,10 +40,11 @@ def dashboard_stats():
         .all()
     )
 
+    # Return the latest 15 activity records (newest → oldest)
     recent_activity = (
         ActivityLog.query.filter_by(user_id=user_id)
         .order_by(ActivityLog.created_at.desc())
-        .limit(10)
+        .limit(15)
         .all()
     )
 
@@ -53,6 +55,17 @@ def dashboard_stats():
             Vulnerability.source == "nmap",
         ).count()
         open_ports_count += port_vulns
+
+    # Log dashboard view (fire-and-forget; does not affect response shape)
+    try:
+        log_user_activity(
+            user_id=user_id,
+            activity="Viewed Analytics",
+            module="Dashboard",
+            description="User visited the Security Dashboard",
+        )
+    except Exception:
+        pass  # never let analytics logging break the dashboard response
 
     return jsonify({
         "total_scans": total_scans,

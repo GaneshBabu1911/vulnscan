@@ -4,7 +4,8 @@ from sqlalchemy import func
 
 from app.database import db
 from app.models import ActivityLog, Scan, User, Vulnerability
-from app.utils.decorators import active_user_required, admin_required, log_activity
+from app.services.activity_service import log_user_activity
+from app.utils.decorators import active_user_required, admin_required
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -45,9 +46,16 @@ def delete_user(user_id):
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    username = user.username
     db.session.delete(user)
     db.session.commit()
-    log_activity(admin_id, "admin_delete_user", f"Deleted user {user.username}")
+
+    log_user_activity(
+        user_id=admin_id,
+        activity="Admin Action",
+        module="Admin",
+        description=f"Deleted user account: {username}",
+    )
     return jsonify({"message": "User deleted"})
 
 
@@ -63,7 +71,13 @@ def suspend_user(user_id):
     user.is_suspended = not user.is_suspended
     db.session.commit()
     action = "suspended" if user.is_suspended else "unsuspended"
-    log_activity(admin_id, f"admin_{action}_user", f"User {user.username} {action}")
+
+    log_user_activity(
+        user_id=admin_id,
+        activity="Admin Action",
+        module="Admin",
+        description=f"User {user.username} has been {action}",
+    )
     return jsonify({"message": f"User {action}", "user": user.to_dict()})
 
 
