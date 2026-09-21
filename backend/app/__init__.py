@@ -82,9 +82,12 @@ def create_app(config_class=None):
         return jsonify({"error": "Authorization required"}), 401
 
     with app.app_context():
-        db.create_all()
-        from app.services.auth_service import ensure_admin_user
+        try:
+            db.create_all()
+            from app.services.auth_service import ensure_admin_user
 
-        ensure_admin_user()
+            ensure_admin_user()
+        except Exception as e:
+            app.logger.warning(f"Database initialization note: {e}")
 
     return app

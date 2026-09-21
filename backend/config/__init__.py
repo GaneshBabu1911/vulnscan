@@ -109,14 +109,33 @@ def _get_database_uri():
     return _build_database_uri()
 
 
+def _get_engine_options(uri: str):
+    """Return driver-appropriate engine options to avoid SQLite locking issues with multiple workers."""
+    if uri.startswith("sqlite"):
+        return {
+            "connect_args": {"timeout": 30, "check_same_thread": False},
+        }
+    return {
+        "pool_recycle": 280,
+        "pool_pre_ping": True,
+        "pool_size": 10,
+        "max_overflow": 20,
+    }
+
+
+_db_uri = _get_database_uri()
+
+
 class DevelopmentConfig(Config):
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = _get_database_uri()
+    SQLALCHEMY_DATABASE_URI = _db_uri
+    SQLALCHEMY_ENGINE_OPTIONS = _get_engine_options(_db_uri)
 
 
 class ProductionConfig(Config):
     DEBUG = False
-    SQLALCHEMY_DATABASE_URI = _get_database_uri()
+    SQLALCHEMY_DATABASE_URI = _db_uri
+    SQLALCHEMY_ENGINE_OPTIONS = _get_engine_options(_db_uri)
     JWT_COOKIE_SECURE = True
 
 
@@ -130,3 +149,4 @@ config_map = {
 def get_config():
     env = os.environ.get("FLASK_ENV", "development")
     return config_map.get(env, DevelopmentConfig)
+

@@ -17,18 +17,23 @@ def _now_naive():
 
 
 def ensure_admin_user():
-    admin = User.query.filter_by(username="admin").first()
-    if not admin:
-        admin = User(
-            username="admin",
-            email="admin@vulnscan.io",
-            password_hash=hash_password(os.environ.get("ADMIN_PASSWORD", "Admin@123456")),
-            role="admin",
-            is_verified=True,
-            is_active=True,
-        )
-        db.session.add(admin)
-        db.session.commit()
+    try:
+        admin = User.query.filter_by(username="admin").first()
+        if not admin:
+            admin = User(
+                username="admin",
+                email="admin@vulnscan.io",
+                password_hash=hash_password(os.environ.get("ADMIN_PASSWORD", "Admin@123456")),
+                role="admin",
+                is_verified=True,
+                is_active=True,
+            )
+            db.session.add(admin)
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        # Admin might have been committed concurrently by another Gunicorn worker
+        pass
 
 
 def register_user(username, email, password):
