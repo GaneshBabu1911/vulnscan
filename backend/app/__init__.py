@@ -65,6 +65,15 @@ def create_app(config_class=None):
     app.register_blueprint(history_bp, url_prefix="/api/history")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
 
+    @app.route("/")
+    def index():
+        return jsonify({
+            "service": "VulnScan API",
+            "status": "online",
+            "version": "1.0.0",
+            "health": "/api/health",
+        })
+
     @app.route("/api/health")
     def health():
         return jsonify({"status": "healthy", "service": "VulnScan API"})
