@@ -2,22 +2,19 @@
 VulnScan MySQL Setup Script
 ============================
 Run this script ONCE to:
-  1. Create the vulscan_db database
-  2. Run all Flask-Migrate migrations (create all tables)
-  3. Create the default admin user
+  1. Create the vulscan_db database on MySQL
+  2. Create all tables via SQLAlchemy ORM
+  3. Ensure the default admin user exists
+  4. Verify all tables in MySQL
 
 Usage:
     python setup_mysql.py
-
-Requirements:
-  - XAMPP MySQL (or any MySQL 8.x) must be running on localhost:3306
-  - .env must have correct DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
 """
 
 import os
 import sys
 
-# ── Ensure we can import the backend package ─────────────────────────────────
+# Ensure backend package can be imported
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BACKEND_DIR)
 
@@ -38,7 +35,7 @@ def step(msg):
 
 
 def create_database():
-    step("Step 1 – Create MySQL database")
+    step("Step 1: Create MySQL database")
     try:
         conn = pymysql.connect(
             host=DB_HOST,
@@ -49,69 +46,32 @@ def create_database():
         with conn.cursor() as cursor:
             cursor.execute(
                 f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}` "
-                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
             )
         conn.commit()
         conn.close()
-        print(f"  ✓  Database '{DB_NAME}' ready on {DB_HOST}:{DB_PORT}")
+        print(f"  [OK] Database '{DB_NAME}' created/verified on {DB_HOST}:{DB_PORT}")
     except Exception as e:
-        print(f"  ✗  Cannot connect to MySQL: {e}")
-        print(
-            "\n  Make sure XAMPP MySQL is running (green in XAMPP Control Panel)\n"
-            "  and that your .env DB_* variables are correct.\n"
-        )
+        print(f"  [ERROR] Cannot connect to MySQL: {e}")
+        print("\nPlease check your DB_HOST, DB_PORT, DB_USER, DB_PASSWORD in backend/.env")
         sys.exit(1)
 
 
-def run_migrations():
-    step("Step 2 – Run Flask-Migrate (create / upgrade all tables)")
-    # Flask-Migrate works through the CLI, so we invoke it via subprocess
-    import subprocess
+def create_tables_and_admin():
+    step("Step 2: Create all database tables & initial admin account")
+    from app import create_app
+    from app.database import db
+    from app.services.auth_service import ensure_admin_user
 
-    flask_exe = os.path.join(BACKEND_DIR, ".venv", "Scripts", "flask.exe")
-    if not os.path.exists(flask_exe):
-        flask_exe = os.path.join(BACKEND_DIR, "venv", "Scripts", "flask.exe")
-    if not os.path.exists(flask_exe):
-        flask_exe = "flask"  # fall back to PATH
-
-    env = os.environ.copy()
-    env["FLASK_APP"] = "run.py"
-    env["FLASK_ENV"] = "development"
-
-    migrations_dir = os.path.join(BACKEND_DIR, "migrations")
-
-    # Only run `flask db init` if the migrations folder doesn't exist yet
-    if not os.path.exists(migrations_dir):
-        print("  Running: flask db init")
-        result = subprocess.run([flask_exe, "db", "init"], env=env, cwd=BACKEND_DIR)
-        if result.returncode != 0:
-            print("  ✗  flask db init failed")
-            sys.exit(1)
-        print("  ✓  migrations/ folder initialised")
-    else:
-        print("  ↳  migrations/ folder already exists – skipping flask db init")
-
-    print("  Running: flask db migrate")
-    result = subprocess.run(
-        [flask_exe, "db", "migrate", "-m", "MySQL migration with enhanced ActivityLog"],
-        env=env,
-        cwd=BACKEND_DIR,
-    )
-    if result.returncode != 0:
-        print("  ✗  flask db migrate failed (check output above)")
-        sys.exit(1)
-
-    print("  Running: flask db upgrade")
-    result = subprocess.run([flask_exe, "db", "upgrade"], env=env, cwd=BACKEND_DIR)
-    if result.returncode != 0:
-        print("  ✗  flask db upgrade failed (check output above)")
-        sys.exit(1)
-
-    print("  ✓  All tables created / upgraded successfully")
+    app = create_app()
+    with app.app_context():
+        db.create_all()
+        ensure_admin_user()
+        print("  [OK] All tables created and admin user initialized.")
 
 
 def verify_tables():
-    step("Step 3 – Verify tables exist in MySQL")
+    step("Step 3: Verify tables in MySQL database")
     conn = pymysql.connect(
         host=DB_HOST,
         port=DB_PORT,
@@ -120,7 +80,7 @@ def verify_tables():
         database=DB_NAME,
     )
     with conn.cursor() as cursor:
-        cursor.execute("SHOW TABLES")
+        cursor.execute("SHOW TABLES;")
         tables = [row[0] for row in cursor.fetchall()]
     conn.close()
 
@@ -132,17 +92,16 @@ def verify_tables():
     ]
     for t in expected:
         if t in tables:
-            print(f"  ✓  {t}")
+            print(f"  [OK] Table '{t}' exists")
         else:
-            print(f"  ✗  MISSING: {t}")
+            print(f"  [MISSING] Table '{t}'")
 
-    print(f"\n  Tables found: {len(tables)}")
+    print(f"\nTotal tables in `{DB_NAME}`: {len(tables)}")
 
 
 if __name__ == "__main__":
-    print("\nVulnScan – MySQL Setup")
+    print("\nVulnScan - MySQL Setup")
     create_database()
-    run_migrations()
+    create_tables_and_admin()
     verify_tables()
-    print("\n  ✅  Setup complete! You can now run: python run.py\n")
-
+    print("\n[SUCCESS] MySQL setup completed! Start the app with: python run.py\n")

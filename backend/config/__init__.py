@@ -16,13 +16,15 @@ def _build_database_uri():
     so the backend can still start for local testing.
     """
     import socket
+    import urllib.parse
 
     host = os.environ.get("DB_HOST", "localhost")
     port = int(os.environ.get("DB_PORT", "3306"))
     name = os.environ.get("DB_NAME", "vulscan_db")
     user = os.environ.get("DB_USER", "root")
     password = os.environ.get("DB_PASSWORD", "")
-    mysql_uri = f"mysql+pymysql://{user}:{password}@{host}:{port}/{name}?charset=utf8mb4"
+    escaped_password = urllib.parse.quote_plus(password)
+    mysql_uri = f"mysql+pymysql://{user}:{escaped_password}@{host}:{port}/{name}?charset=utf8mb4"
 
     # Quick socket check (1 second timeout)
     try:
