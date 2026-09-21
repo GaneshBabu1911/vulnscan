@@ -70,20 +70,43 @@ Set `VITE_API_URL=http://localhost:5000/api` in `.env`.
 
 ---
 
-## Render
+## Render Deployment
 
-1. **PostgreSQL**: Create a PostgreSQL instance on Render.
-2. **Backend Web Service**:
-   - Root directory: `backend`
-   - Environment: Docker
-   - Set env vars from `.env.example`
-   - `DATABASE_URL` from Render PostgreSQL
-   - `FRONTEND_URL` = your static site URL
-3. **Frontend Static Site**:
-   - Root directory: `frontend`
-   - Build: `npm run build`
-   - Publish: `dist`
-   - `VITE_API_URL` = your backend URL + `/api`
+### Method 1: Render Blueprint (Automatic / One-Click)
+1. In your [Render Dashboard](https://dashboard.render.com), click **New +** → **Blueprint**.
+2. Connect your GitHub repository: `GaneshBabu1911/vulnscan`.
+3. Render will read `render.yaml` and configure both the backend Docker service and frontend static site automatically.
+4. Set your `DATABASE_URL` or `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` in the backend environment variables.
+5. Click **Apply**.
+
+---
+
+### Method 2: Manual Web Service Setup
+1. **Backend Web Service**:
+   - **Name**: `vulnscan-backend`
+   - **Language / Runtime**: `Docker`
+   - **Dockerfile Path**: `backend/Dockerfile`
+   - **Docker Context**: `backend`
+   - **Environment Variables**:
+     - `FLASK_ENV` = `production`
+     - `PORT` = `5000`
+     - `SECRET_KEY` = `your-secret-key`
+     - `JWT_SECRET_KEY` = `your-jwt-key`
+     - `ADMIN_PASSWORD` = `Admin@123456`
+     - `FRONTEND_URL` = `https://your-frontend.onrender.com`
+     - `DATABASE_URL` = `mysql+pymysql://user:pass@host:port/vulscan_db` (or set `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`)
+     - `AI_PROVIDER` = `local`
+   - **Health Check Path**: `/api/health`
+
+2. **Frontend Static Site**:
+   - **Name**: `vulnscan-frontend`
+   - **Root Directory**: `frontend`
+   - **Build Command**: `npm install && npm run build`
+   - **Publish Directory**: `dist`
+   - **Environment Variables**:
+     - `VITE_API_URL` = `https://vulnscan-backend.onrender.com/api`
+   - **Redirect / Rewrite Rules**:
+     - `/*` → `/index.html` (Rewrite)
 
 ---
 

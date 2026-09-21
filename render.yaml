@@ -1,0 +1,47 @@
+# ── Render Blueprint Configuration for VulnScan ─────────────────────────────
+services:
+  # ── Backend Web Service (Flask API + Nmap scanner in Docker) ───────────────
+  - type: web
+    name: vulnscan-backend
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    region: oregon
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        value: Admin@123456
+      - key: AI_PROVIDER
+        value: local
+      # Database: set DATABASE_URL (e.g. mysql+pymysql://... or postgresql://...)
+      # or set individual DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: vulnscan-frontend
+          property: host
+
+  # ── Frontend Static Site (React Vite) ──────────────────────────────────────
+  - type: web
+    name: vulnscan-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: vulnscan-backend
+          property: host

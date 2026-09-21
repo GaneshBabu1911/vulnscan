@@ -26,9 +26,16 @@ def create_app(config_class=None):
     jwt.init_app(app)
     limiter.init_app(app)
 
+    allowed_origins = [
+        app.config.get("FRONTEND_URL", "http://localhost:5173"),
+        "http://localhost:5173",
+        "http://localhost:3000",
+        r"https://.*\.onrender\.com",
+        r"https://.*\.vercel\.app",
+    ]
     CORS(
         app,
-        origins=[app.config["FRONTEND_URL"], "http://localhost:5173"],
+        origins=allowed_origins,
         supports_credentials=True,
     )
 

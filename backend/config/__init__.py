@@ -87,14 +87,30 @@ class Config:
     RATELIMIT_STORAGE_URI = os.environ.get("REDIS_URL", "memory://")
 
 
+def _get_database_uri():
+    """
+    Get and normalize database URI for production and development.
+    Handles cloud provider URLs (e.g. Render / Railway / Aiven) by ensuring
+    the correct driver prefix (e.g., mysql:// -> mysql+pymysql://).
+    """
+    db_url = os.environ.get("DATABASE_URL")
+    if db_url:
+        if db_url.startswith("mysql://"):
+            return db_url.replace("mysql://", "mysql+pymysql://", 1)
+        if db_url.startswith("postgres://"):
+            return db_url.replace("postgres://", "postgresql://", 1)
+        return db_url
+    return _build_database_uri()
+
+
 class DevelopmentConfig(Config):
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or _build_database_uri()
+    SQLALCHEMY_DATABASE_URI = _get_database_uri()
 
 
 class ProductionConfig(Config):
     DEBUG = False
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or _build_database_uri()
+    SQLALCHEMY_DATABASE_URI = _get_database_uri()
     JWT_COOKIE_SECURE = True
 
 
