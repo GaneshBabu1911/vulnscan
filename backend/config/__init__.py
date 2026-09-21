@@ -8,14 +8,44 @@ _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 load_dotenv(_env_path)
 
 
-def _build_mysql_uri():
-    """Assemble a PyMySQL connection URI from individual env vars."""
+def _build_database_uri():
+    """
+    Assemble PyMySQL URI from env vars.
+    In development mode, checks if MySQL is reachable on host:port.
+    If MySQL is not reachable, falls back to SQLite with a clear notice
+    so the backend can still start for local testing.
+    """
+    import socket
+
     host = os.environ.get("DB_HOST", "localhost")
-    port = os.environ.get("DB_PORT", "3306")
+    port = int(os.environ.get("DB_PORT", "3306"))
     name = os.environ.get("DB_NAME", "vulscan_db")
     user = os.environ.get("DB_USER", "root")
     password = os.environ.get("DB_PASSWORD", "")
-    return f"mysql+pymysql://{user}:{password}@{host}:{port}/{name}?charset=utf8mb4"
+    mysql_uri = f"mysql+pymysql://{user}:{password}@{host}:{port}/{name}?charset=utf8mb4"
+
+    # Quick socket check (1 second timeout)
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1.0)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        if result == 0:
+            print(f"[DB] MySQL detected on {host}:{port} -> using MySQL ({name})")
+            return mysql_uri
+    except Exception:
+        pass
+
+    # If MySQL not reachable and running in dev, fall back to SQLite
+    if os.environ.get("FLASK_ENV", "development") != "production":
+        print(f"[DB] MySQL not reachable on {host}:{port} -> using SQLite fallback for local dev")
+        print("[DB] Start XAMPP MySQL and run 'python setup_mysql.py' to use MySQL")
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        db_path = os.path.join(backend_dir, "instance", "vulnscan.db")
+        return f"sqlite:///{db_path}"
+
+    return mysql_uri
+
 
 
 class Config:
@@ -57,12 +87,12 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or _build_mysql_uri()
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or _build_database_uri()
 
 
 class ProductionConfig(Config):
     DEBUG = False
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or _build_mysql_uri()
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or _build_database_uri()
     JWT_COOKIE_SECURE = True
 
 
