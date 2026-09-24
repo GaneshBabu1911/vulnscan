@@ -51,11 +51,8 @@ export const authAPI = {
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
-  /** OTP Step 1: request a 6-digit OTP to be sent to the registered email */
   sendOTP: (email: string) => api.post('/auth/send-otp', { email }),
-  /** OTP Step 2: verify the OTP; returns { session_token } on success */
   verifyOTP: (email: string, otp: string) => api.post('/auth/verify-otp', { email, otp }),
-  /** Reset with OTP session token (Step 3) or legacy URL token */
   resetPassword: (tokenOrSession: string, password: string, isSession = false) =>
     api.post('/auth/reset-password', isSession
       ? { session_token: tokenOrSession, password }
@@ -99,7 +96,6 @@ export const profileAPI = {
   notifications: () => api.get('/profile/notifications'),
   markRead: (id: number) => api.put(`/profile/notifications/${id}/read`),
   markAllRead: () => api.put('/profile/notifications/read-all'),
-  /** Fetch the latest 15 activity log entries for the authenticated user */
   activity: () => api.get('/profile/activity'),
 };
 

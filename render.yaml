@@ -45,3 +45,4 @@ services:
           type: web
           name: vulnscan-backend
           property: host
+

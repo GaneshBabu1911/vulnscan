@@ -50,30 +50,10 @@ def update_profile():
     return jsonify({"message": "Profile updated", "user": user.to_dict()})
 
 
-# ── Activity History ──────────────────────────────────────────────────────────
-
 @profile_bp.route("/activity", methods=["GET"])
 @jwt_required()
 @active_user_required()
 def get_activity():
-    """
-    Return the latest 15 activity log entries for the authenticated user.
-
-    Response shape:
-    {
-        "activity": [
-            {
-                "id": 1,
-                "activity": "Login",
-                "module": "Auth",
-                "description": "User johndoe logged in",
-                "created_at": "2026-09-21T09:00:00"
-            },
-            ...
-        ],
-        "total": 15
-    }
-    """
     user_id = int(get_jwt_identity())
     logs = get_user_activity(user_id, limit=15)
     return jsonify({
@@ -81,8 +61,6 @@ def get_activity():
         "total": len(logs),
     })
 
-
-# ── Notifications ─────────────────────────────────────────────────────────────
 
 @profile_bp.route("/notifications", methods=["GET"])
 @jwt_required()

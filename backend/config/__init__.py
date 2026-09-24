@@ -1,22 +1,15 @@
 import os
+import urllib.parse
 from datetime import timedelta
 
 from dotenv import load_dotenv
 
-# Load .env from the backend directory (two levels up from this file)
 _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 load_dotenv(_env_path)
 
 
 def _build_database_uri():
-    """
-    Assemble PyMySQL URI from env vars.
-    In development mode, checks if MySQL is reachable on host:port.
-    If MySQL is not reachable, falls back to SQLite with a clear notice
-    so the backend can still start for local testing.
-    """
     import socket
-    import urllib.parse
 
     host = os.environ.get("DB_HOST", "localhost")
     port = int(os.environ.get("DB_PORT", "3306"))
@@ -26,28 +19,23 @@ def _build_database_uri():
     escaped_password = urllib.parse.quote_plus(password)
     mysql_uri = f"mysql+pymysql://{user}:{escaped_password}@{host}:{port}/{name}?charset=utf8mb4"
 
-    # Quick socket check (1 second timeout)
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1.0)
         result = sock.connect_ex((host, port))
         sock.close()
         if result == 0:
-            print(f"[DB] MySQL detected on {host}:{port} -> using MySQL ({name})")
             return mysql_uri
     except Exception:
         pass
 
-    # If MySQL not reachable on host, fall back to SQLite with notice
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.makedirs(os.path.join(backend_dir, "instance"), exist_ok=True)
     db_path = os.path.join(backend_dir, "instance", "vulnscan.db")
-    print(f"[DB] MySQL not reachable on {host}:{port} -> using SQLite fallback ({db_path})")
     return f"sqlite:///{db_path}"
 
 
 def _format_frontend_url():
-    """Format and normalize FRONTEND_URL so Render service names work as complete URLs."""
     raw = os.environ.get("FRONTEND_URL", "http://localhost:5173").strip()
     if raw and not raw.startswith("http://") and not raw.startswith("https://"):
         if ".onrender.com" not in raw and "localhost" not in raw:
@@ -56,12 +44,36 @@ def _format_frontend_url():
     return raw
 
 
+def _get_database_uri():
+    db_url = os.environ.get("DATABASE_URL")
+    if db_url:
+        if db_url.startswith("mysql://"):
+            return db_url.replace("mysql://", "mysql+pymysql://", 1)
+        if db_url.startswith("postgres://"):
+            return db_url.replace("postgres://", "postgresql://", 1)
+        return db_url
+    return _build_database_uri()
+
+
+def _get_engine_options(uri: str):
+    if uri.startswith("sqlite"):
+        return {
+            "connect_args": {"timeout": 30, "check_same_thread": False},
+        }
+    return {
+        "pool_recycle": 280,
+        "pool_pre_ping": True,
+        "pool_size": 10,
+        "max_overflow": 20,
+    }
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_recycle": 280,      # recycle connections before MySQL wait_timeout (default 8h)
-        "pool_pre_ping": True,    # check connection liveness before use
+        "pool_recycle": 280,
+        "pool_pre_ping": True,
         "pool_size": 10,
         "max_overflow": 20,
     }
@@ -93,36 +105,6 @@ class Config:
     RATELIMIT_STORAGE_URI = os.environ.get("REDIS_URL", "memory://")
 
 
-def _get_database_uri():
-    """
-    Get and normalize database URI for production and development.
-    Handles cloud provider URLs (e.g. Render / Railway / Aiven) by ensuring
-    the correct driver prefix (e.g., mysql:// -> mysql+pymysql://).
-    """
-    db_url = os.environ.get("DATABASE_URL")
-    if db_url:
-        if db_url.startswith("mysql://"):
-            return db_url.replace("mysql://", "mysql+pymysql://", 1)
-        if db_url.startswith("postgres://"):
-            return db_url.replace("postgres://", "postgresql://", 1)
-        return db_url
-    return _build_database_uri()
-
-
-def _get_engine_options(uri: str):
-    """Return driver-appropriate engine options to avoid SQLite locking issues with multiple workers."""
-    if uri.startswith("sqlite"):
-        return {
-            "connect_args": {"timeout": 30, "check_same_thread": False},
-        }
-    return {
-        "pool_recycle": 280,
-        "pool_pre_ping": True,
-        "pool_size": 10,
-        "max_overflow": 20,
-    }
-
-
 _db_uri = _get_database_uri()
 
 
@@ -149,4 +131,3 @@ config_map = {
 def get_config():
     env = os.environ.get("FLASK_ENV", "development")
     return config_map.get(env, DevelopmentConfig)
-

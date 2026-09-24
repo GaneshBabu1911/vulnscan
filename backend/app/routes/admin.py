@@ -21,10 +21,17 @@ def list_users():
         page=page, per_page=per_page, error_out=False
     )
 
+    scan_counts = dict(
+        db.session.query(Scan.user_id, func.count(Scan.id))
+        .filter(Scan.user_id.in_([u.id for u in pagination.items]))
+        .group_by(Scan.user_id)
+        .all()
+    )
+
     users = []
     for u in pagination.items:
         user_data = u.to_dict()
-        user_data["scan_count"] = Scan.query.filter_by(user_id=u.id).count()
+        user_data["scan_count"] = scan_counts.get(u.id, 0)
         users.append(user_data)
 
     return jsonify({
@@ -109,11 +116,21 @@ def admin_analytics():
     total_scans = Scan.query.count()
     total_vulns = Vulnerability.query.count()
 
-    severity_counts = {}
-    for sev in ["critical", "high", "medium", "low", "info"]:
-        severity_counts[sev] = Vulnerability.query.filter_by(severity=sev).count()
+    severity_rows = (
+        db.session.query(Vulnerability.severity, func.count(Vulnerability.id))
+        .group_by(Vulnerability.severity)
+        .all()
+    )
+    severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    for sev, cnt in severity_rows:
+        if sev in severity_counts:
+            severity_counts[sev] = cnt
 
-    avg_risk = Scan.query.filter_by(status="completed").with_entities(func.avg(Scan.risk_score)).scalar() or 0
+    avg_risk = (
+        Scan.query.filter_by(status="completed")
+        .with_entities(func.avg(Scan.risk_score))
+        .scalar()
+    ) or 0
 
     return jsonify({
         "total_users": total_users,

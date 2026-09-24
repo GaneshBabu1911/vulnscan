@@ -1,4 +1,3 @@
-import os
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -33,11 +32,7 @@ def create_app(config_class=None):
         r"https://.*\.onrender\.com",
         r"https://.*\.vercel\.app",
     ]
-    CORS(
-        app,
-        origins=allowed_origins,
-        supports_credentials=True,
-    )
+    CORS(app, origins=allowed_origins, supports_credentials=True)
 
     @app.after_request
     def set_security_headers(response):
@@ -94,7 +89,6 @@ def create_app(config_class=None):
         try:
             db.create_all()
             from app.services.auth_service import ensure_admin_user
-
             ensure_admin_user()
         except Exception as e:
             app.logger.warning(f"Database initialization note: {e}")

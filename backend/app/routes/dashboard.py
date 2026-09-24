@@ -2,30 +2,32 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import func
 
+from app.database import db
 from app.models import ActivityLog, Scan, Vulnerability
 from app.services.activity_service import log_user_activity
 from app.utils.decorators import active_user_required
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
-
 @dashboard_bp.route("/stats", methods=["GET"])
 @jwt_required()
 @active_user_required()
 def dashboard_stats():
     user_id = int(get_jwt_identity())
-
     total_scans = Scan.query.filter_by(user_id=user_id).count()
     completed_scans = Scan.query.filter_by(user_id=user_id, status="completed").count()
 
-    vuln_query = (
-        Vulnerability.query.join(Scan)
+    severity_rows = (
+        db.session.query(Vulnerability.severity, func.count(Vulnerability.id))
+        .join(Scan, Vulnerability.scan_id == Scan.id)
         .filter(Scan.user_id == user_id)
+        .group_by(Vulnerability.severity)
+        .all()
     )
-
     severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    for severity in severity_counts:
-        severity_counts[severity] = vuln_query.filter(Vulnerability.severity == severity).count()
+    for sev, cnt in severity_rows:
+        if sev in severity_counts:
+            severity_counts[sev] = cnt
 
     avg_risk = (
         Scan.query.filter_by(user_id=user_id, status="completed")
@@ -40,7 +42,6 @@ def dashboard_stats():
         .all()
     )
 
-    # Return the latest 15 activity records (newest → oldest)
     recent_activity = (
         ActivityLog.query.filter_by(user_id=user_id)
         .order_by(ActivityLog.created_at.desc())
@@ -48,15 +49,13 @@ def dashboard_stats():
         .all()
     )
 
-    open_ports_count = 0
-    for scan in Scan.query.filter_by(user_id=user_id, status="completed").all():
-        port_vulns = Vulnerability.query.filter(
-            Vulnerability.scan_id == scan.id,
-            Vulnerability.source == "nmap",
-        ).count()
-        open_ports_count += port_vulns
+    open_ports_count = (
+        db.session.query(func.count(Vulnerability.id))
+        .join(Scan, Vulnerability.scan_id == Scan.id)
+        .filter(Scan.user_id == user_id, Scan.status == "completed", Vulnerability.source == "nmap")
+        .scalar()
+    ) or 0
 
-    # Log dashboard view (fire-and-forget; does not affect response shape)
     try:
         log_user_activity(
             user_id=user_id,
@@ -65,7 +64,7 @@ def dashboard_stats():
             description="User visited the Security Dashboard",
         )
     except Exception:
-        pass  # never let analytics logging break the dashboard response
+        pass
 
     return jsonify({
         "total_scans": total_scans,
@@ -77,7 +76,6 @@ def dashboard_stats():
         "recent_activity": [a.to_dict() for a in recent_activity],
     })
 
-
 @dashboard_bp.route("/analytics", methods=["GET"])
 @jwt_required()
 @active_user_required()
@@ -85,14 +83,16 @@ def analytics():
     user_id = int(get_jwt_identity())
 
     severity_distribution = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    vulns = (
-        Vulnerability.query.join(Scan)
+    severity_rows = (
+        db.session.query(Vulnerability.severity, func.count(Vulnerability.id))
+        .join(Scan, Vulnerability.scan_id == Scan.id)
         .filter(Scan.user_id == user_id)
+        .group_by(Vulnerability.severity)
         .all()
     )
-    for v in vulns:
-        if v.severity in severity_distribution:
-            severity_distribution[v.severity] += 1
+    for sev, cnt in severity_rows:
+        if sev in severity_distribution:
+            severity_distribution[sev] = cnt
 
     monthly_scans = {}
     scans = Scan.query.filter_by(user_id=user_id).order_by(Scan.created_at.desc()).all()

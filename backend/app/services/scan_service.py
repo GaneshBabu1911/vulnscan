@@ -1,5 +1,3 @@
-"""Scan orchestrator - coordinates all scanning modules."""
-
 import socket
 import threading
 from datetime import datetime, timezone
@@ -18,8 +16,6 @@ from app.services.auth_service import send_critical_alert_email, send_scan_compl
 from app.services.risk_engine import calculate_overall_risk, score_vulnerability, score_zap_alert
 from app.utils.validators import extract_domain_from_url
 
-
-
 class ScanOrchestrator:
     def __init__(self, scan_id, app):
         self.scan_id = scan_id
@@ -30,11 +26,6 @@ class ScanOrchestrator:
         timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
         entry = f"[{timestamp}] {message}"
         self.logs.append(entry)
-        with self.app.app_context():
-            scan = Scan.query.get(self.scan_id)
-            if scan:
-                scan.logs = "\n".join(self.logs)
-                db.session.commit()
 
     def run(self):
         with self.app.app_context():
@@ -45,6 +36,7 @@ class ScanOrchestrator:
             scan.status = "running"
             scan.started_at = datetime.now(timezone.utc)
             scan.progress = 5
+            scan.logs = "\n".join(self.logs)
             db.session.commit()
 
             try:
@@ -56,9 +48,9 @@ class ScanOrchestrator:
 
                 self._log(f"Starting vulnerability assessment for {url}")
                 scan.progress = 10
+                scan.logs = "\n".join(self.logs)
                 db.session.commit()
 
-                # Phase 1: HTTP Security Headers
                 self._log("Phase 1/5: HTTP Security Header Analysis")
                 header_checker = HeaderChecker()
                 header_result = header_checker.check(url, self._log)
@@ -67,9 +59,9 @@ class ScanOrchestrator:
                     v.update(scored)
                     all_vulns.append(v)
                 scan.progress = 25
+                scan.logs = "\n".join(self.logs)
                 db.session.commit()
 
-                # Phase 2: SSL/TLS Check
                 self._log("Phase 2/5: SSL/TLS Certificate Analysis")
                 if domain and url.startswith("https"):
                     ssl_checker = SSLChecker()
@@ -81,9 +73,9 @@ class ScanOrchestrator:
                 else:
                     self._log("Skipping SSL check (non-HTTPS target)")
                 scan.progress = 40
+                scan.logs = "\n".join(self.logs)
                 db.session.commit()
 
-                # Phase 3: OWASP ZAP Scan
                 self._log("Phase 3/5: OWASP ZAP Vulnerability Scan")
                 zap = ZAPScanner()
                 zap.spider_scan(url, self._log)
@@ -101,9 +93,9 @@ class ScanOrchestrator:
                     alert.update({k: v for k, v in extra.items() if k not in alert})
                     all_vulns.append(alert)
                 scan.progress = 65
+                scan.logs = "\n".join(self.logs)
                 db.session.commit()
 
-                # Phase 4: Nmap Port Scan
                 self._log("Phase 4/5: Network Port Scan (Nmap)")
                 nmap = NmapScanner()
                 scan_target = target.ip_address or domain
@@ -116,45 +108,51 @@ class ScanOrchestrator:
                     open_ports = len(nmap_result.get("open_ports", []))
                     self._log(f"Network scan found {open_ports} open ports")
                 scan.progress = 85
+                scan.logs = "\n".join(self.logs)
                 db.session.commit()
 
-                # Phase 5: AI Recommendations
                 self._log("Phase 5/5: Generating AI Recommendations")
                 ai_engine = AIRecommendationEngine()
                 recommendations = ai_engine.generate_recommendations(all_vulns)
 
-                # Save vulnerabilities
-                for v_data in all_vulns:
-                    vuln = Vulnerability(
-                        scan_id=scan.id,
-                        name=v_data.get("name", "Unknown"),
-                        category=v_data.get("category", "General"),
-                        severity=v_data.get("severity", "info"),
-                        cvss_score=v_data.get("cvss_score", 0.0),
-                        cvss_vector=v_data.get("cvss_vector", ""),
-                        description=v_data.get("description", ""),
-                        evidence=v_data.get("evidence", ""),
-                        solution=v_data.get("solution", ""),
-                        reference=v_data.get("reference", ""),
-                        source=v_data.get("source", "unknown"),
-                        cwe_id=v_data.get("cwe_id", v_data.get("cweid", "")),
-                    )
-                    db.session.add(vuln)
+                now = datetime.now(timezone.utc)
+                vuln_dicts = [
+                    {
+                        "scan_id": scan.id,
+                        "name": v.get("name", "Unknown"),
+                        "category": v.get("category", "General"),
+                        "severity": v.get("severity", "info"),
+                        "cvss_score": v.get("cvss_score", 0.0),
+                        "cvss_vector": v.get("cvss_vector", ""),
+                        "description": v.get("description", ""),
+                        "evidence": v.get("evidence", ""),
+                        "solution": v.get("solution", ""),
+                        "reference": v.get("reference", ""),
+                        "source": v.get("source", "unknown"),
+                        "cwe_id": v.get("cwe_id", v.get("cweid", "")),
+                        "created_at": now,
+                    }
+                    for v in all_vulns
+                ]
+                if vuln_dicts:
+                    db.session.bulk_insert_mappings(Vulnerability, vuln_dicts)
 
-                db.session.flush()
-
-                for rec_data in recommendations:
-                    rec = Recommendation(
-                        scan_id=scan.id,
-                        title=rec_data.get("title", "Recommendation"),
-                        explanation=rec_data.get("explanation", ""),
-                        impact=rec_data.get("impact", ""),
-                        fix_steps=rec_data.get("fix_steps", ""),
-                        best_practices=rec_data.get("best_practices", ""),
-                        preventive_measures=rec_data.get("preventive_measures", ""),
-                        priority=rec_data.get("priority", "medium"),
-                    )
-                    db.session.add(rec)
+                rec_dicts = [
+                    {
+                        "scan_id": scan.id,
+                        "title": r.get("title", "Recommendation"),
+                        "explanation": r.get("explanation", ""),
+                        "impact": r.get("impact", ""),
+                        "fix_steps": r.get("fix_steps", ""),
+                        "best_practices": r.get("best_practices", ""),
+                        "preventive_measures": r.get("preventive_measures", ""),
+                        "priority": r.get("priority", "medium"),
+                        "created_at": now,
+                    }
+                    for r in recommendations
+                ]
+                if rec_dicts:
+                    db.session.bulk_insert_mappings(Recommendation, rec_dicts)
 
                 risk_score, overall_severity = calculate_overall_risk(all_vulns)
                 scan.risk_score = risk_score
@@ -162,11 +160,10 @@ class ScanOrchestrator:
                 scan.status = "completed"
                 scan.progress = 100
                 scan.completed_at = datetime.now(timezone.utc)
-                db.session.commit()
+                scan.logs = "\n".join(self.logs)
 
                 self._log(f"Scan completed. Risk score: {risk_score}/10 ({overall_severity})")
 
-                # Log completed scan activity
                 log_user_activity(
                     user_id=scan.user_id,
                     activity="Completed Scan",
@@ -174,7 +171,6 @@ class ScanOrchestrator:
                     description=f"Scan of {url} completed – risk score {risk_score}/10 ({overall_severity})",
                 )
 
-                # Notifications
                 user = scan.user
                 notif = Notification(
                     user_id=user.id,
@@ -205,13 +201,11 @@ class ScanOrchestrator:
                 db.session.commit()
                 current_app.logger.error(f"Scan {self.scan_id} failed: {e}")
 
-
 def start_scan_async(scan_id, app):
     orchestrator = ScanOrchestrator(scan_id, app)
     thread = threading.Thread(target=orchestrator.run, daemon=True)
     thread.start()
     return thread
-
 
 def resolve_ip(domain):
     try:
