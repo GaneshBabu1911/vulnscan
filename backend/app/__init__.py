@@ -1,3 +1,4 @@
+import os
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -27,14 +28,37 @@ def create_app(config_class=None):
     jwt.init_app(app)
     limiter.init_app(app)
 
-    allowed_origins = [
-        app.config.get("FRONTEND_URL", "http://localhost:5173"),
-        "http://localhost:5173",
-        "http://localhost:3000",
-        r"https://.*\.onrender\.com",
-        r"https://.*\.vercel\.app",
-    ]
-    CORS(app, origins=allowed_origins, supports_credentials=True)
+    is_prod = os.environ.get("FLASK_ENV") == "production"
+
+    if is_prod:
+        origins = []
+        cors_env = app.config.get("CORS_ORIGINS") or os.environ.get("CORS_ORIGINS", "")
+        if cors_env:
+            origins.extend([o.strip() for o in cors_env.split(",") if o.strip()])
+        frontend_url = app.config.get("FRONTEND_URL")
+        if frontend_url:
+            origins.append(frontend_url)
+        origins.extend([
+            r"https://.*\.onrender\.com",
+            r"https://.*\.vercel\.app",
+        ])
+        allowed_origins = list(dict.fromkeys(origins))
+    else:
+        allowed_origins = [
+            app.config.get("FRONTEND_URL", "http://localhost:5173"),
+            "http://localhost:5173",
+            "http://localhost:3000",
+            r"https://.*\.onrender\.com",
+            r"https://.*\.vercel\.app",
+        ]
+
+    CORS(
+        app,
+        origins=allowed_origins,
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    )
 
     @app.after_request
     def set_security_headers(response):

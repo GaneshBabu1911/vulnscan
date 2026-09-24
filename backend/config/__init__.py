@@ -36,7 +36,8 @@ def _build_database_uri():
 
 
 def _format_frontend_url():
-    raw = os.environ.get("FRONTEND_URL", "http://localhost:5173").strip()
+    is_prod = os.environ.get("FLASK_ENV") == "production"
+    raw = os.environ.get("FRONTEND_URL", "" if is_prod else "http://localhost:5173").strip()
     if raw and not raw.startswith("http://") and not raw.startswith("https://"):
         if ".onrender.com" not in raw and "localhost" not in raw:
             return f"https://{raw}.onrender.com"
@@ -69,7 +70,7 @@ def _get_engine_options(uri: str):
 
 
 class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
+    SECRET_KEY = os.environ.get("SECRET_KEY", "vulnscan-production-stable-secret-key-2026")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_recycle": 280,
@@ -78,10 +79,10 @@ class Config:
         "max_overflow": 20,
     }
 
-    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "jwt-secret-change-in-production")
+    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "vulnscan-production-jwt-stable-secret-key-2026")
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
-    JWT_TOKEN_LOCATION = ["headers"]
+    JWT_TOKEN_LOCATION = ["headers", "cookies"]
     JWT_COOKIE_SECURE = os.environ.get("FLASK_ENV") == "production"
     JWT_COOKIE_CSRF_PROTECT = False
 
@@ -93,6 +94,7 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "noreply@vulnscan.io")
 
     FRONTEND_URL = _format_frontend_url()
+    CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "")
     ZAP_API_URL = os.environ.get("ZAP_API_URL", "http://localhost:8080")
     ZAP_API_KEY = os.environ.get("ZAP_API_KEY", "")
 

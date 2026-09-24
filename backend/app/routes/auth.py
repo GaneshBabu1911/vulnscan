@@ -77,15 +77,24 @@ def login():
         password = data.get("password", "")
         remember = data.get("remember_me", False)
 
+        current_app.logger.info(f"[AUTH DEPLOYMENT] Login request received for email: {email}")
+
         if not email or not password:
-            return jsonify({"error": "Invalid Email or Password"}), 401
+            current_app.logger.warning("[AUTH DEPLOYMENT] Missing email or password in request")
+            return jsonify({"error": "Invalid credentials"}), 401
 
         user = User.query.filter_by(email=email).first()
         if not user:
-            return jsonify({"error": "Invalid Email or Password"}), 401
+            current_app.logger.warning(f"[AUTH DEPLOYMENT] User not found: {email}")
+            return jsonify({"error": "Invalid credentials"}), 401
 
-        if not check_password_hash(user.password_hash, password):
-            return jsonify({"error": "Invalid Email or Password"}), 401
+        current_app.logger.info(f"[AUTH DEPLOYMENT] User found: id={user.id}, username={user.username}")
+
+        is_pw_valid = check_password_hash(user.password_hash, password)
+        current_app.logger.info(f"[AUTH DEPLOYMENT] Password verification result: {is_pw_valid}")
+
+        if not is_pw_valid:
+            return jsonify({"error": "Invalid credentials"}), 401
 
         if user.is_suspended:
             return jsonify({"error": "Account is suspended"}), 403
@@ -100,6 +109,8 @@ def login():
             identity=str(user.id), additional_claims=additional_claims, expires_delta=expires
         )
         refresh_token = create_refresh_token(identity=str(user.id))
+
+        current_app.logger.info(f"[AUTH DEPLOYMENT] JWT generated successfully for user_id={user.id}")
 
         try:
             log_user_activity(
@@ -118,7 +129,7 @@ def login():
         }), 200
 
     except Exception as e:
-        current_app.logger.error(f"Login error: {e}")
+        current_app.logger.error(f"[AUTH DEPLOYMENT] Login server error: {e}")
         return jsonify({"error": "Server Error"}), 500
 
 

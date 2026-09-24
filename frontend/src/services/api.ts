@@ -1,10 +1,22 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+function getBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (!envUrl) return '/api';
+  let url = envUrl.trim();
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = `https://${url}`;
+  }
+  if (!url.endsWith('/api')) {
+    url = url.endsWith('/') ? `${url}api` : `${url}/api`;
+  }
+  return url;
+}
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: getBaseUrl(),
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
@@ -24,8 +36,9 @@ api.interceptors.response.use(
       const refreshToken = localStorage.getItem('refresh_token');
       if (refreshToken) {
         try {
-          const { data } = await axios.post(`${API_URL}/auth/refresh`, {}, {
+          const { data } = await axios.post(`${getBaseUrl()}/auth/refresh`, {}, {
             headers: { Authorization: `Bearer ${refreshToken}` },
+            withCredentials: true,
           });
           localStorage.setItem('access_token', data.access_token);
           original.headers.Authorization = `Bearer ${data.access_token}`;
