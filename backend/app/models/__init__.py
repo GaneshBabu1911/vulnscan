@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 from app.database import db
 
+
 def utcnow():
     return datetime.now(timezone.utc)
+
 
 class User(db.Model):
     __tablename__ = "users"
@@ -37,6 +39,7 @@ class User(db.Model):
             data["email"] = self.email
         return data
 
+
 class Target(db.Model):
     __tablename__ = "targets"
 
@@ -57,11 +60,13 @@ class Target(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 class Scan(db.Model):
     __tablename__ = "scans"
     __table_args__ = (
-        db.Index('idx_scan_user_status', 'user_id', 'status'),
-        db.Index('idx_scan_user_created', 'user_id', 'created_at'),
+        db.Index("idx_scan_user_status", "user_id", "status"),
+        db.Index("idx_scan_user_created", "user_id", "created_at"),
+        {},
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -103,10 +108,12 @@ class Scan(db.Model):
             data["logs"] = self.logs
         return data
 
+
 class Vulnerability(db.Model):
     __tablename__ = "vulnerabilities"
     __table_args__ = (
-        db.Index('idx_vuln_scan_severity', 'scan_id', 'severity'),
+        db.Index("idx_vuln_scan_severity", "scan_id", "severity"),
+        {},
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -142,6 +149,7 @@ class Vulnerability(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 class Recommendation(db.Model):
     __tablename__ = "recommendations"
 
@@ -172,10 +180,12 @@ class Recommendation(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 class Report(db.Model):
     __tablename__ = "reports"
     __table_args__ = (
-        db.Index('idx_report_scan_user', 'scan_id', 'user_id'),
+        db.Index("idx_report_scan_user", "scan_id", "user_id"),
+        {},
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -195,10 +205,12 @@ class Report(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 class Notification(db.Model):
     __tablename__ = "notifications"
     __table_args__ = (
-        db.Index('idx_notif_user_read', 'user_id', 'is_read'),
+        db.Index("idx_notif_user_read", "user_id", "is_read"),
+        {},
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -219,10 +231,12 @@ class Notification(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 class ActivityLog(db.Model):
     __tablename__ = "activity_logs"
     __table_args__ = (
-        db.Index('idx_activity_user_created', 'user_id', 'created_at'),
+        db.Index("idx_activity_user_created", "user_id", "created_at"),
+        {},
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -244,6 +258,7 @@ class ActivityLog(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 class PasswordResetToken(db.Model):
     __tablename__ = "password_reset_tokens"
 
@@ -253,6 +268,7 @@ class PasswordResetToken(db.Model):
     expires_at = db.Column(db.DateTime, nullable=False)
     used = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=utcnow)
+
 
 class EmailVerificationToken(db.Model):
     __tablename__ = "email_verification_tokens"
@@ -264,8 +280,8 @@ class EmailVerificationToken(db.Model):
     used = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=utcnow)
 
+
 class OTPToken(db.Model):
-    """6-digit OTP for password-reset verification sent to registered email."""
     __tablename__ = "otp_tokens"
 
     id = db.Column(db.Integer, primary_key=True)
