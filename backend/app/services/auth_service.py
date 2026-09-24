@@ -8,11 +8,10 @@ from flask_mail import Message
 from app.database import db
 from app.models import EmailVerificationToken, OTPToken, PasswordResetToken, User
 from app.utils.decorators import generate_token
-from app.utils.security import check_password, hash_password
+from app.utils.security import check_password_hash, generate_password_hash, hash_password, check_password
 
 
 def _now_naive():
-    """Return current UTC time as timezone-naive datetime for DB comparisons."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
@@ -23,25 +22,27 @@ def ensure_admin_user():
             admin = User(
                 username="admin",
                 email="admin@vulnscan.io",
-                password_hash=hash_password(os.environ.get("ADMIN_PASSWORD", "Admin@123456")),
+                password_hash=generate_password_hash(os.environ.get("ADMIN_PASSWORD", "Admin@123456")),
                 role="admin",
                 is_verified=True,
                 is_active=True,
+                is_suspended=False,
             )
             db.session.add(admin)
             db.session.commit()
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        # Admin might have been committed concurrently by another Gunicorn worker
-        pass
 
 
 def register_user(username, email, password):
     user = User(
         username=username,
         email=email,
-        password_hash=hash_password(password),
+        password_hash=generate_password_hash(password),
         role="user",
+        is_active=True,
+        is_verified=False,
+        is_suspended=False,
     )
     db.session.add(user)
     db.session.commit()
@@ -57,12 +58,14 @@ def register_user(username, email, password):
 
 
 def authenticate_user(email, password):
+    if not email or not password:
+        return None, "Invalid Email or Password"
     user = User.query.filter_by(email=email).first()
-    if not user or not check_password(password, user.password_hash):
-        return None, "Invalid email or password"
+    if not user or not check_password_hash(user.password_hash, password):
+        return None, "Invalid Email or Password"
     if user.is_suspended:
         return None, "Account is suspended"
-    if not user.is_active:
+    if user.is_active is False:
         return None, "Account is deactivated"
     return user, None
 
@@ -85,7 +88,7 @@ def reset_password(token_str, new_password):
     user = User.query.get(token.user_id)
     if not user:
         return False, "User not found"
-    user.password_hash = hash_password(new_password)
+    user.password_hash = generate_password_hash(new_password)
     token.used = True
     db.session.commit()
     return True, None
@@ -104,25 +107,15 @@ def verify_email_token(token_str):
     return True, user
 
 
-# ─── OTP-based Password Reset ────────────────────────────────────────────────
-
 def _generate_otp(length=6):
-    """Generate a numeric OTP of given length."""
     return "".join(random.choices(string.digits, k=length))
 
 
 def create_and_send_otp(email):
-    """
-    Look up user by email, generate a 6-digit OTP, persist it, and email it.
-    Always returns a generic message to prevent email enumeration.
-    Returns (True, None) on success or (False, error_msg) on hard failure.
-    """
     user = User.query.filter_by(email=email).first()
     if not user:
-        # Don't reveal whether email exists
         return True, None
 
-    # Invalidate any previous unused OTPs for this user
     OTPToken.query.filter_by(user_id=user.id, used=False).update({"used": True})
     db.session.flush()
 
@@ -142,11 +135,6 @@ def create_and_send_otp(email):
 
 
 def verify_otp_and_issue_session(email, otp_input):
-    """
-    Verify the OTP for the given email. On success, mark OTP as verified
-    and issue a short-lived session token that can be used to reset the password.
-    Returns (session_token, None) or (None, error_msg).
-    """
     user = User.query.filter_by(email=email).first()
     if not user:
         return None, "Invalid OTP"
@@ -164,7 +152,6 @@ def verify_otp_and_issue_session(email, otp_input):
     if otp_record.otp != otp_input.strip():
         return None, "Incorrect OTP. Please try again."
 
-    # Mark verified and issue a session token (valid 15 min)
     session_token = generate_token(48)
     otp_record.verified = True
     otp_record.session_token = session_token
@@ -174,9 +161,6 @@ def verify_otp_and_issue_session(email, otp_input):
 
 
 def reset_password_with_session(session_token, new_password):
-    """
-    Reset password using the session token issued after OTP verification.
-    """
     otp_record = OTPToken.query.filter_by(
         session_token=session_token, verified=True, used=False
     ).first()
@@ -188,13 +172,11 @@ def reset_password_with_session(session_token, new_password):
     if not user:
         return False, "User not found"
 
-    user.password_hash = hash_password(new_password)
+    user.password_hash = generate_password_hash(new_password)
     otp_record.used = True
     db.session.commit()
     return True, None
 
-
-# ─── Email Helpers ────────────────────────────────────────────────────────────
 
 def send_email(subject, recipients, body, html=None):
     try:
@@ -228,7 +210,6 @@ def send_otp_email(user, otp):
         f"Your one-time password (OTP) for resetting your VulnScan account password is:\n\n"
         f"  {otp}\n\n"
         f"This OTP is valid for 10 minutes. Do not share it with anyone.\n\n"
-        f"If you did not request a password reset, please ignore this email.\n\n"
         f"— VulnScan Security Team"
     )
     html = f"""
@@ -245,11 +226,8 @@ def send_otp_email(user, otp):
                      color:#00ff41;font-weight:bold;">{otp}</span>
       </div>
       <p style="color:#888;font-size:13px;">
-        ⏱ This OTP expires in <strong style="color:#e0e0e0;">10 minutes</strong>.<br>
-        🔒 Do not share this code with anyone.
-      </p>
-      <p style="color:#555;font-size:12px;margin-top:32px;">
-        If you did not request a password reset, please ignore this email.
+        This OTP expires in <strong style="color:#e0e0e0;">10 minutes</strong>.<br>
+        Do not share this code with anyone.
       </p>
     </div>
     """

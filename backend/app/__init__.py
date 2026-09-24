@@ -5,6 +5,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_mail import Mail
 from flask_migrate import Migrate
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import get_config
 from app.database import db
@@ -18,6 +19,7 @@ limiter = Limiter(key_func=get_remote_address)
 def create_app(config_class=None):
     app = Flask(__name__)
     app.config.from_object(config_class or get_config())
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     db.init_app(app)
     migrate.init_app(app, db)

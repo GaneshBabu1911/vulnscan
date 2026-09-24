@@ -1,4 +1,5 @@
-from flask import Blueprint, jsonify, request
+from datetime import timedelta
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import create_access_token, create_refresh_token, get_jwt_identity, jwt_required
 
 from app import limiter
@@ -17,14 +18,14 @@ from app.services.auth_service import (
     verify_otp_and_issue_session,
 )
 from app.services.activity_service import log_user_activity
-from app.utils.security import hash_password
+from app.utils.security import check_password_hash, generate_password_hash
 from app.utils.validators import validate_email, validate_password, validate_username
 
 auth_bp = Blueprint("auth", __name__)
 
 
 @auth_bp.route("/register", methods=["POST"])
-@limiter.limit("10 per hour")
+@limiter.limit("20 per minute")
 def register():
     data = request.get_json()
     if not data:
@@ -50,49 +51,75 @@ def register():
         return jsonify({"error": "Username already taken"}), 409
 
     user, token = register_user(username, email, password)
-    send_verification_email(user, token)
-    log_user_activity(
-        user_id=user.id,
-        activity="Registered",
-        module="Auth",
-        description=f"New account created for {username}",
-    )
+    try:
+        send_verification_email(user, token)
+    except Exception:
+        pass
+    try:
+        log_user_activity(
+            user_id=user.id,
+            activity="Registered",
+            module="Auth",
+            description=f"New account created for {username}",
+        )
+    except Exception:
+        pass
 
     return jsonify({"message": "Registration successful. Please verify your email.", "user": user.to_dict()}), 201
 
 
 @auth_bp.route("/login", methods=["POST"])
-@limiter.limit("20 per hour")
+@limiter.limit("60 per minute")
 def login():
-    data = request.get_json()
-    email = data.get("email", "").strip().lower()
-    password = data.get("password", "")
-    remember = data.get("remember_me", False)
+    try:
+        data = request.get_json() or {}
+        email = data.get("email", "").strip().lower()
+        password = data.get("password", "")
+        remember = data.get("remember_me", False)
 
-    user, error = authenticate_user(email, password)
-    if error:
-        return jsonify({"error": error}), 401
+        if not email or not password:
+            return jsonify({"error": "Invalid Email or Password"}), 401
 
-    expires = __import__("datetime").timedelta(days=30) if remember else None
-    additional_claims = {"role": user.role, "username": user.username}
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({"error": "Invalid Email or Password"}), 401
 
-    access_token = create_access_token(
-        identity=str(user.id), additional_claims=additional_claims, expires_delta=expires
-    )
-    refresh_token = create_refresh_token(identity=str(user.id))
+        if not check_password_hash(user.password_hash, password):
+            return jsonify({"error": "Invalid Email or Password"}), 401
 
-    log_user_activity(
-        user_id=user.id,
-        activity="Login",
-        module="Auth",
-        description=f"User {user.username} logged in",
-    )
+        if user.is_suspended:
+            return jsonify({"error": "Account is suspended"}), 403
 
-    return jsonify({
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "user": user.to_dict(),
-    })
+        if user.is_active is False:
+            return jsonify({"error": "Account is deactivated"}), 403
+
+        expires = timedelta(days=30) if remember else None
+        additional_claims = {"role": user.role, "username": user.username}
+
+        access_token = create_access_token(
+            identity=str(user.id), additional_claims=additional_claims, expires_delta=expires
+        )
+        refresh_token = create_refresh_token(identity=str(user.id))
+
+        try:
+            log_user_activity(
+                user_id=user.id,
+                activity="Login",
+                module="Auth",
+                description=f"User {user.username} logged in",
+            )
+        except Exception:
+            pass
+
+        return jsonify({
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "user": user.to_dict(),
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Login error: {e}")
+        return jsonify({"error": "Server Error"}), 500
 
 
 @auth_bp.route("/refresh", methods=["POST"])
@@ -120,31 +147,31 @@ def logout():
     return jsonify({"message": "Logged out successfully"})
 
 
-# ── Legacy link-based reset (kept for backwards compatibility) ────────────────
-
 @auth_bp.route("/forgot-password", methods=["POST"])
-@limiter.limit("5 per hour")
+@limiter.limit("10 per hour")
 def forgot_password():
-    data = request.get_json()
+    data = request.get_json() or {}
     email = data.get("email", "").strip().lower()
     user = User.query.filter_by(email=email).first()
     if user:
         token = create_password_reset_token(user.id)
-        send_password_reset_email(user, token)
+        try:
+            send_password_reset_email(user, token)
+        except Exception:
+            pass
     return jsonify({"message": "If the email exists, a reset link has been sent."})
 
 
 @auth_bp.route("/reset-password", methods=["POST"])
 @limiter.limit("10 per hour")
 def reset_password_route():
-    data = request.get_json()
+    data = request.get_json() or {}
     password = data.get("password", "")
 
     valid, msg = validate_password(password)
     if not valid:
         return jsonify({"error": msg}), 400
 
-    # Support both legacy URL-token and new OTP session-token
     session_token = data.get("session_token", "")
     legacy_token = data.get("token", "")
 
@@ -160,16 +187,9 @@ def reset_password_route():
     return jsonify({"message": "Password reset successful"})
 
 
-# ── OTP-based password reset ──────────────────────────────────────────────────
-
 @auth_bp.route("/send-otp", methods=["POST"])
-@limiter.limit("5 per hour")
+@limiter.limit("10 per hour")
 def send_otp():
-    """
-    Step 1: User enters their email.
-    Generates a 6-digit OTP and emails it to the registered address.
-    Always returns a generic success message to prevent email enumeration.
-    """
     data = request.get_json() or {}
     email = data.get("email", "").strip().lower()
 
@@ -185,12 +205,8 @@ def send_otp():
 
 
 @auth_bp.route("/verify-otp", methods=["POST"])
-@limiter.limit("10 per hour")
+@limiter.limit("20 per hour")
 def verify_otp():
-    """
-    Step 2: User submits the 6-digit OTP received in email.
-    On success, returns a short-lived session_token to be used in Step 3.
-    """
     data = request.get_json() or {}
     email = data.get("email", "").strip().lower()
     otp = data.get("otp", "").strip()
@@ -208,11 +224,9 @@ def verify_otp():
     })
 
 
-# ── Email Verification ────────────────────────────────────────────────────────
-
 @auth_bp.route("/verify-email", methods=["POST"])
 def verify_email():
-    data = request.get_json()
+    data = request.get_json() or {}
     token = data.get("token", "")
     success, result = verify_email_token(token)
     if not success:
@@ -235,20 +249,18 @@ def me():
 def change_password():
     user_id = get_jwt_identity()
     user = User.query.get(int(user_id))
-    data = request.get_json()
+    data = request.get_json() or {}
     current = data.get("current_password", "")
     new_pass = data.get("new_password", "")
 
-    from app.utils.security import check_password
-
-    if not check_password(current, user.password_hash):
+    if not check_password_hash(user.password_hash, current):
         return jsonify({"error": "Current password is incorrect"}), 401
 
     valid, msg = validate_password(new_pass)
     if not valid:
         return jsonify({"error": msg}), 400
 
-    user.password_hash = hash_password(new_pass)
+    user.password_hash = generate_password_hash(new_pass)
     db.session.commit()
     log_user_activity(
         user_id=user.id,
